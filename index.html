@@ -273,9 +273,138 @@ svg.vizsvg{width:100%;display:block}
 .anim .bunt-lbl   {animation:buntLabel 3.5s ease-in-out infinite}
 .anim .infly-ball {animation:inflyUp 4s ease-in-out infinite}
 .anim .infly-lbl  {animation:inflyLabel 4s ease-in-out infinite}
+
+/* ══════════════════════════════════
+   고급 인터랙션 효과
+══════════════════════════════════ */
+
+/* 커서 글로우 */
+#cursor-glow {
+  position:fixed; pointer-events:none; z-index:9999;
+  width:320px; height:320px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(227,165,37,0.07) 0%, transparent 70%);
+  transform:translate(-50%,-50%);
+  transition:opacity .3s;
+  mix-blend-mode:screen;
+}
+#cursor-dot {
+  position:fixed; pointer-events:none; z-index:9999;
+  width:8px; height:8px; border-radius:50%;
+  background:#e3a525;
+  transform:translate(-50%,-50%);
+  transition:transform .1s, opacity .3s;
+  box-shadow:0 0 12px #e3a525, 0 0 24px #e3a52566;
+  mix-blend-mode:screen;
+}
+
+/* 파티클 캔버스 */
+#particle-canvas {
+  position:fixed; top:0; left:0;
+  width:100%; height:100%;
+  pointer-events:none; z-index:0;
+  opacity:0.6;
+}
+
+/* wrap이 캔버스 위에 오도록 */
+.wrap { position:relative; z-index:1; }
+
+/* 카드 3D tilt */
+.nb, .rc {
+  transform-style:preserve-3d;
+  will-change:transform;
+}
+.nb {
+  transition:transform .15s ease, border-color .2s, box-shadow .2s, background .2s;
+}
+.nb:hover {
+  box-shadow: 0 8px 32px rgba(227,165,37,0.18), 0 2px 8px rgba(0,0,0,0.4);
+}
+.rc {
+  transition:transform .12s ease, border-color .2s, box-shadow .2s;
+}
+.rc:hover {
+  box-shadow:0 6px 28px rgba(56,139,253,0.12), 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* 스크롤 fade-in */
+.rc {
+  opacity:0;
+  transform:translateY(24px);
+  transition:opacity .5s ease, transform .5s ease, border-color .2s, box-shadow .2s;
+}
+.rc.visible {
+  opacity:1;
+  transform:translateY(0);
+}
+.rc.open {
+  opacity:1 !important;
+  transform:none !important;
+}
+
+/* 섹션 전환 슬라이드 */
+#rules {
+  overflow:hidden;
+}
+.rules-inner {
+  transition:opacity .25s ease, transform .28s ease;
+}
+.rules-inner.exit-left  { opacity:0; transform:translateX(-32px); }
+.rules-inner.exit-right { opacity:0; transform:translateX(32px); }
+.rules-inner.enter      { opacity:0; transform:translateY(16px); }
+
+/* 네비게이션 탭 언더라인 indicator */
+.nb.on::after {
+  content:'';
+  position:absolute; bottom:0; left:20%; right:20%; height:2px;
+  background:var(--gold);
+  border-radius:2px;
+  animation:tabLine .3s ease forwards;
+}
+@keyframes tabLine {
+  from { transform:scaleX(0); opacity:0; }
+  to   { transform:scaleX(1); opacity:1; }
+}
+
+/* 헤더 야구장 마우스 시차 */
+.hdr-stadium {
+  transition:transform .08s linear;
+  will-change:transform;
+}
+
+/* 룰 카드 열릴때 border glow pulse */
+@keyframes borderPulse {
+  0%   { box-shadow:0 0 0 0 rgba(56,139,253,0.4); }
+  50%  { box-shadow:0 0 0 8px rgba(56,139,253,0); }
+  100% { box-shadow:0 0 0 0 rgba(56,139,253,0); }
+}
+.rc.open { animation:borderPulse .5s ease; }
+
+/* 섹션 버튼 ripple */
+.nb-ripple {
+  position:absolute; border-radius:50%;
+  background:rgba(227,165,37,0.25);
+  transform:scale(0); pointer-events:none;
+  animation:ripple .5s ease-out forwards;
+}
+@keyframes ripple {
+  to { transform:scale(4); opacity:0; }
+}
+
+/* 스크롤바 스타일 */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:#0d1117; }
+::-webkit-scrollbar-thumb { background:#2a3547; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#3d5278; }
 </style>
 </head>
 <body>
+<!-- 파티클 배경 캔버스 -->
+<canvas id="particle-canvas"></canvas>
+<!-- 커서 효과 -->
+<div id="cursor-glow"></div>
+<div id="cursor-dot"></div>
+
 <div class="wrap">
 
 <!-- 헤더 SVG 야구장 -->
@@ -1022,6 +1151,242 @@ function tog(rid,vizId){
   }
 }
 renderNav();renderRules();
+
+/* ══════════════════════════════════
+   고급 인터랙션 JS
+══════════════════════════════════ */
+
+/* ── 1. 커서 글로우 추적 ── */
+const glow = document.getElementById('cursor-glow');
+const dot  = document.getElementById('cursor-dot');
+let mx=0, my=0, gx=0, gy=0;
+
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  dot.style.left = mx+'px';
+  dot.style.top  = my+'px';
+});
+
+// 글로우는 부드럽게 lerp 추적
+(function lerpGlow(){
+  gx += (mx-gx)*0.08;
+  gy += (my-gy)*0.08;
+  glow.style.left = gx+'px';
+  glow.style.top  = gy+'px';
+  requestAnimationFrame(lerpGlow);
+})();
+
+/* ── 2. 파티클 (별 + 야구공) 배경 ── */
+const canvas = document.getElementById('particle-canvas');
+const ctx = canvas.getContext('2d');
+let W, H, particles=[];
+
+function resizeCanvas(){
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// 마우스 위치 (파티클 반응용)
+let pmx=W/2, pmy=H/2;
+document.addEventListener('mousemove', e=>{ pmx=e.clientX; pmy=e.clientY; });
+
+function mkParticle(){
+  const isBall = Math.random()<0.04; // 4%는 야구공 모양
+  return {
+    x: Math.random()*W,
+    y: Math.random()*H,
+    r: isBall ? 3.5 : Math.random()*1.4+0.3,
+    vx: (Math.random()-0.5)*0.25,
+    vy: -Math.random()*0.35-0.1,
+    alpha: Math.random()*0.5+0.1,
+    isBall,
+    color: isBall ? '#f0e8d0' : (Math.random()<0.3 ? '#e3a525' : '#388bfd'),
+    twinkle: Math.random()*Math.PI*2,
+  };
+}
+
+for(let i=0;i<120;i++) particles.push(mkParticle());
+
+function drawBallParticle(p){
+  ctx.save();
+  ctx.globalAlpha = p.alpha;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+  ctx.fillStyle = '#f0e8d0';
+  ctx.fill();
+  ctx.strokeStyle = '#c8a87888';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  // 야구 실밥 (간단히 두 호)
+  ctx.beginPath();
+  ctx.arc(p.x-0.8, p.y, p.r*0.7, -0.5, 0.5);
+  ctx.strokeStyle='#c8705088';
+  ctx.lineWidth=0.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function animParticles(){
+  ctx.clearRect(0,0,W,H);
+
+  const t = Date.now()*0.001;
+  particles.forEach((p,i)=>{
+    // 마우스 근처 파티클 살짝 밀리기
+    const dx = p.x-pmx, dy = p.y-pmy;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist<120){
+      const force = (120-dist)/120*0.4;
+      p.vx += dx/dist*force*0.05;
+      p.vy += dy/dist*force*0.05;
+    }
+
+    p.x  += p.vx;
+    p.y  += p.vy;
+    p.vy *= 0.99;
+    p.vx *= 0.99;
+    p.twinkle += 0.03;
+
+    // 화면 밖 리셋
+    if(p.y<-10||p.x<-10||p.x>W+10){
+      Object.assign(p, mkParticle());
+      p.y = H+5;
+    }
+
+    const flicker = p.isBall ? 1 : 0.6+Math.sin(p.twinkle)*0.4;
+    if(p.isBall){
+      drawBallParticle(p);
+    } else {
+      ctx.save();
+      ctx.globalAlpha = p.alpha*flicker;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle = p.color;
+      if(p.r>0.8){
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = p.color;
+      }
+      ctx.fill();
+      ctx.restore();
+    }
+  });
+  requestAnimationFrame(animParticles);
+}
+animParticles();
+
+/* ── 3. 카드 3D Tilt ── */
+function applyTilt(el, e){
+  const rect = el.getBoundingClientRect();
+  const cx = rect.left+rect.width/2;
+  const cy = rect.top+rect.height/2;
+  const dx = (e.clientX-cx)/(rect.width/2);
+  const dy = (e.clientY-cy)/(rect.height/2);
+  const tiltX = dy*-6;  // 상하 기울기 (도)
+  const tiltY = dx*8;   // 좌우 기울기 (도)
+  el.style.transform = `perspective(600px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateZ(4px)`;
+}
+function resetTilt(el){
+  el.style.transform = '';
+}
+
+// nav 버튼에 tilt
+document.addEventListener('mousemove', e=>{
+  document.querySelectorAll('.nb').forEach(el=>{
+    const r = el.getBoundingClientRect();
+    if(e.clientX>r.left&&e.clientX<r.right&&e.clientY>r.top&&e.clientY<r.bottom){
+      applyTilt(el,e);
+    }
+  });
+  // rc 카드에 tilt (열리지 않은 것만)
+  document.querySelectorAll('.rc:not(.open)').forEach(el=>{
+    const r = el.getBoundingClientRect();
+    if(e.clientX>r.left&&e.clientX<r.right&&e.clientY>r.top&&e.clientY<r.bottom){
+      applyTilt(el,e);
+    } else {
+      resetTilt(el);
+    }
+  });
+});
+document.addEventListener('mouseleave',()=>{
+  document.querySelectorAll('.nb,.rc').forEach(el=>resetTilt(el));
+});
+
+/* ── 4. nav 버튼 ripple ── */
+document.addEventListener('click', e=>{
+  const nb = e.target.closest('.nb');
+  if(!nb) return;
+  const r = nb.getBoundingClientRect();
+  const rip = document.createElement('span');
+  rip.className='nb-ripple';
+  const size = Math.max(r.width,r.height);
+  rip.style.cssText=`width:${size}px;height:${size}px;left:${e.clientX-r.left-size/2}px;top:${e.clientY-r.top-size/2}px`;
+  nb.appendChild(rip);
+  setTimeout(()=>rip.remove(),500);
+});
+
+/* ── 5. 스크롤 fade-in (IntersectionObserver) ── */
+const io = new IntersectionObserver(entries=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting){
+      // staggered delay
+      const idx = [...document.querySelectorAll('.rc')].indexOf(entry.target);
+      entry.target.style.transitionDelay = `${idx*60}ms`;
+      entry.target.classList.add('visible');
+      io.unobserve(entry.target);
+    }
+  });
+},{threshold:0.1});
+
+function observeCards(){
+  document.querySelectorAll('.rc').forEach(el=>{
+    el.style.transitionDelay='';
+    io.observe(el);
+  });
+}
+
+/* ── 6. 섹션 전환 슬라이드 트랜지션 ── */
+const SECTION_ORDER = ['overview','score','pitch','base','field','special'];
+let prevSectionIdx = 0;
+
+const origSw = sw;
+window.sw = function(id){
+  const rulesEl = document.getElementById('rules');
+  const curIdx  = SECTION_ORDER.indexOf(id);
+  const dir     = curIdx > prevSectionIdx ? 'exit-left' : 'exit-right';
+
+  // 기존 내용 슬라이드 아웃
+  const inner = rulesEl.querySelector('.rules-inner') || rulesEl;
+  rulesEl.style.opacity='0';
+  rulesEl.style.transform = dir==='exit-left' ? 'translateX(-20px)' : 'translateX(20px)';
+  rulesEl.style.transition='opacity .2s ease, transform .2s ease';
+
+  setTimeout(()=>{
+    origSw(id);
+    rulesEl.style.transform='translateX(0)';
+    rulesEl.style.opacity='1';
+    prevSectionIdx = curIdx;
+    observeCards();
+  }, 200);
+};
+
+/* ── 7. 헤더 야구장 마우스 시차 (parallax) ── */
+const stadium = document.querySelector('.hdr-stadium');
+document.addEventListener('mousemove', e=>{
+  if(!stadium) return;
+  const rect = stadium.getBoundingClientRect();
+  const cx = window.innerWidth/2;
+  const cy = rect.top+rect.height/2;
+  const dx = (e.clientX-cx)/cx;         // -1 ~ 1
+  const dy = (e.clientY-cy)/(window.innerHeight/2);
+  stadium.style.transform=`perspective(800px) rotateX(${dy*-4}deg) rotateY(${dx*6}deg) scale(1.02)`;
+});
+document.querySelector('.hdr')?.addEventListener('mouseleave',()=>{
+  if(stadium) stadium.style.transform='';
+});
+
+/* ── 8. 초기 카드 관찰 시작 ── */
+setTimeout(observeCards, 100);
 </script>
 </body>
 </html>
